@@ -91,6 +91,7 @@ CREATE TABLE t_student (
                            gender VARCHAR(20) DEFAULT '未知',
                            ethnicity VARCHAR(50),
                            political_status VARCHAR(50) DEFAULT '未知',
+                           party_stage_id INTEGER DEFAULT 0,
                            class_name VARCHAR(100) NOT NULL,
                            major VARCHAR(100) NOT NULL,
                            grade VARCHAR(50) NOT NULL,
@@ -107,6 +108,7 @@ COMMENT ON COLUMN t_student.name IS '姓名';
 COMMENT ON COLUMN t_student.gender IS '性别：男/女/未知';
 COMMENT ON COLUMN t_student.ethnicity IS '民族';
 COMMENT ON COLUMN t_student.political_status IS '政治面貌';
+COMMENT ON COLUMN t_student.party_stage_id IS '党团流程阶段：0未申请，1入党申请人，2入党积极分子，3发展对象，4预备党员，5正式党员';
 COMMENT ON COLUMN t_student.class_name IS '班级';
 COMMENT ON COLUMN t_student.major IS '专业';
 COMMENT ON COLUMN t_student.grade IS '年级';
@@ -173,40 +175,58 @@ COMMENT ON COLUMN t_policy_doc.created_at IS '创建时间';
 COMMENT ON COLUMN t_policy_doc.updated_at IS '更新时间';
 
 -- =====================================================
--- 6. 课程库表
+-- 15. 学业预警分析结果表 (新增)
 -- 说明：
--- 存储课程基础信息，用于学业预警、培养方案比对和选课建议
+-- 存储你的 Python 解析引擎对比生成的完整预警结果，
+-- 包括提取的课程JSON、挂科记录和学习建议。
 -- =====================================================
-CREATE TABLE t_course (
-                          id BIGINT PRIMARY KEY,
-                          course_code VARCHAR(100) NOT NULL,
-                          course_name VARCHAR(200) NOT NULL,
-                          credit NUMERIC(5,2),
-                          course_type VARCHAR(100),
-                          module_type VARCHAR(100),
-                          major VARCHAR(100),
-                          grade VARCHAR(50),
-                          semester VARCHAR(50),
-                          status INTEGER DEFAULT 1,
-                          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE t_warning_record (
+    id BIGINT PRIMARY KEY,
+    user_id BIGINT,
+    student_no VARCHAR(50) NOT NULL,
+    transcript_file_id BIGINT,
+    training_plan_id BIGINT,
+    warning_level VARCHAR(50) DEFAULT '未知',
+    total_earned_credits DECIMAL(10,2),
+    course_count INTEGER,
+    core_course_count INTEGER,
+    failed_course_count INTEGER,
+    missing_course_count INTEGER,
+    parsed_courses_json TEXT,
+    core_courses_json TEXT,
+    failed_courses_json TEXT,
+    missing_courses_json TEXT,
+    suggestions_json TEXT,
+    analysis_status INTEGER DEFAULT 1,
+    error_message VARCHAR(1000),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-COMMENT ON TABLE t_course IS '课程库表';
-COMMENT ON COLUMN t_course.id IS '课程ID';
-COMMENT ON COLUMN t_course.course_code IS '课程代码';
-COMMENT ON COLUMN t_course.course_name IS '课程名称';
-COMMENT ON COLUMN t_course.credit IS '学分';
-COMMENT ON COLUMN t_course.course_type IS '课程类型，如必修/选修/通识';
-COMMENT ON COLUMN t_course.module_type IS '培养方案模块，如核心课/专业选修/通识课';
-COMMENT ON COLUMN t_course.major IS '适用专业';
-COMMENT ON COLUMN t_course.grade IS '适用年级';
-COMMENT ON COLUMN t_course.semester IS '开课学期';
-COMMENT ON COLUMN t_course.status IS '课程状态：1正常，0停用';
-COMMENT ON COLUMN t_course.created_at IS '创建时间';
-COMMENT ON COLUMN t_course.updated_at IS '更新时间';
+COMMENT ON TABLE t_warning_record IS '学业预警分析结果记录表';
+COMMENT ON COLUMN t_warning_record.id IS '记录ID';
+COMMENT ON COLUMN t_warning_record.user_id IS '上传成绩单的用户ID，对应 t_user.id';
+COMMENT ON COLUMN t_warning_record.student_no IS '学生学号，对应 t_student.student_no';
+COMMENT ON COLUMN t_warning_record.transcript_file_id IS '成绩单文件ID，对应 t_file.id';
+COMMENT ON COLUMN t_warning_record.training_plan_id IS '本次比对所使用的培养方案ID，对应 t_training_plan.id';
+COMMENT ON COLUMN t_warning_record.warning_level IS '预警等级（正常/一般预警/严重预警/退学预警等）';
+COMMENT ON COLUMN t_warning_record.total_earned_credits IS '累计获得学分';
+COMMENT ON COLUMN t_warning_record.course_count IS '成绩单中解析出的总课程数';
+COMMENT ON COLUMN t_warning_record.core_course_count IS '解析出的核心课总数';
+COMMENT ON COLUMN t_warning_record.failed_course_count IS '挂科课程数';
+COMMENT ON COLUMN t_warning_record.missing_course_count IS '缺失核心课程数';
+COMMENT ON COLUMN t_warning_record.parsed_courses_json IS '解析出的所有课程信息 JSON 数组';
+COMMENT ON COLUMN t_warning_record.core_courses_json IS '解析出的核心课信息 JSON 数组';
+COMMENT ON COLUMN t_warning_record.failed_courses_json IS '挂科课程信息 JSON 数组';
+COMMENT ON COLUMN t_warning_record.missing_courses_json IS '缺失核心课信息 JSON 数组';
+COMMENT ON COLUMN t_warning_record.suggestions_json IS '引擎生成的学习建议 JSON 数组';
+COMMENT ON COLUMN t_warning_record.analysis_status IS '分析状态：1成功，0失败';
+COMMENT ON COLUMN t_warning_record.error_message IS '如果分析失败，存储错误信息';
+COMMENT ON COLUMN t_warning_record.created_at IS '分析时间';
+COMMENT ON COLUMN t_warning_record.updated_at IS '更新时间';
 
-CREATE UNIQUE INDEX uk_course_code ON t_course(course_code);
+-- 创建学号索引，方便按学生查询历史预警记录
+CREATE INDEX idx_warning_student_no ON t_warning_record(student_no);
 
 -- =====================================================
 -- 7. 培养方案表（JSON 存储）
@@ -289,28 +309,10 @@ COMMENT ON COLUMN t_process_stage.duration IS '标准持续时长，单位可按
 COMMENT ON COLUMN t_process_stage.description IS '阶段说明';
 
 -- =====================================================
--- 10. 学生党团阶段记录表
+-- 10. 学生党团阶段
 -- 说明：
--- 记录每个学生当前所处党团阶段
+-- 党团阶段已合并到 t_student.party_stage_id 字段，不再单独建表
 -- =====================================================
-CREATE TABLE t_student_stage (
-                                 id BIGINT PRIMARY KEY,
-                                 student_no VARCHAR(50) NOT NULL,
-                                 stage_id INTEGER NOT NULL,
-                                 start_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                                 stage_status VARCHAR(50) DEFAULT '进行中',
-                                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-COMMENT ON TABLE t_student_stage IS '学生当前党团阶段进度表';
-COMMENT ON COLUMN t_student_stage.id IS '记录ID';
-COMMENT ON COLUMN t_student_stage.student_no IS '学号，对应 t_student.student_no';
-COMMENT ON COLUMN t_student_stage.stage_id IS '阶段ID，对应 t_process_stage.stage_id';
-COMMENT ON COLUMN t_student_stage.start_date IS '当前阶段开始时间';
-COMMENT ON COLUMN t_student_stage.stage_status IS '阶段状态：进行中/已完成/暂停';
-COMMENT ON COLUMN t_student_stage.created_at IS '创建时间';
-COMMENT ON COLUMN t_student_stage.updated_at IS '更新时间';
 
 -- =====================================================
 -- 11. 电子证明申请表
@@ -436,6 +438,7 @@ VALUES (1001, 'admin', 'e10adc3949ba59abbe56e057f20f883e', 'admin', NULL, NULL, 
 -- =====================================================
 INSERT INTO t_process_stage (stage_id, stage_name, order_num, duration, description)
 VALUES
+    (0, '未申请', 0, NULL, '未提交入党申请书'),
     (1, '入党申请人', 1, NULL, '提交入党申请书后的初始阶段'),
     (2, '入党积极分子', 2, NULL, '经推荐和培养后确定为入党积极分子'),
     (3, '发展对象', 3, NULL, '经过培养考察后确定为发展对象'),
@@ -453,11 +456,11 @@ VALUES
 
 -- INSERT INTO t_student (
 --     id, student_no, name, gender, ethnicity, political_status,
---     class_name, major, grade, contact, status
+--     party_stage_id, class_name, major, grade, contact, status
 -- )
 -- VALUES
 --     (1, '20240001', '张三', '未知', '汉族', '未知',
---      '计科2401', '计算机科学与技术', '2024', '13800000000', 1);
+--      1, '计科2401', '计算机科学与技术', '2024', '13800000000', 1);
 
 -- INSERT INTO t_user (
 --     id, username, password, role_code, student_no, wechat_openid, status
@@ -465,12 +468,6 @@ VALUES
 -- VALUES
 --     (1, '张三', '123456', 'student', '20240001', NULL, 1),
 --     (2, 'admin', '123456', 'admin', NULL, NULL, 1);
-
--- INSERT INTO t_student_stage (
---     id, student_no, stage_id, start_date, stage_status
--- )
--- VALUES
---     (1, '20240001', 1, CURRENT_TIMESTAMP, '进行中');
 
 -- INSERT INTO t_certificate_apply (
 --     id, student_no, certificate_type, apply_status, extra_data, file_id

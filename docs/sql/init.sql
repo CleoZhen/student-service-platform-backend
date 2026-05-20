@@ -11,9 +11,12 @@
 -- =====================================================
 DROP TABLE IF EXISTS t_notification_receipt;
 DROP TABLE IF EXISTS t_notification;
+DROP TABLE IF EXISTS t_approval_task;
 DROP TABLE IF EXISTS t_certificate_apply;
 DROP TABLE IF EXISTS t_student_stage;
 DROP TABLE IF EXISTS t_process_stage;
+DROP TABLE IF EXISTS t_course;
+DROP TABLE IF EXISTS t_policy_doc;
 DROP TABLE IF EXISTS t_operation_log;
 DROP TABLE IF EXISTS t_file;
 DROP TABLE IF EXISTS t_student;
@@ -47,6 +50,8 @@ COMMENT ON COLUMN t_role.updated_at IS '更新时间';
 -- t_user 只负责登录账号和身份识别
 -- 学生详细信息放到 t_student
 -- 管理员账号也存这里
+-- 登录时建议支持 username 或 student_no 登录：
+-- WHERE username = ? OR student_no = ?
 -- =====================================================
 CREATE TABLE t_user (
                         id BIGINT PRIMARY KEY,
@@ -62,7 +67,7 @@ CREATE TABLE t_user (
 
 COMMENT ON TABLE t_user IS '用户表，负责登录账号和身份识别';
 COMMENT ON COLUMN t_user.id IS '用户ID';
-COMMENT ON COLUMN t_user.username IS '登录用户名。学生可使用姓名或学号，管理员可使用账号名';
+COMMENT ON COLUMN t_user.username IS '登录用户名。学生可使用姓名，管理员可使用账号名；登录逻辑应同时支持 student_no';
 COMMENT ON COLUMN t_user.password IS '登录密码，后续应加密存储';
 COMMENT ON COLUMN t_user.role_code IS '角色编码：student/admin';
 COMMENT ON COLUMN t_user.student_no IS '学号，学生用户使用，用于关联 t_student.student_no';
@@ -139,7 +144,72 @@ COMMENT ON COLUMN t_file.business_type IS '业务类型：policy/template/notice
 COMMENT ON COLUMN t_file.created_at IS '创建时间';
 
 -- =====================================================
--- 5. 操作日志表
+-- 5. 政策知识库文档表
+-- 说明：
+-- 存储政策文件、办事说明、模板说明等知识库内容
+-- 用于 AI 问答和 Web 管理端知识库维护
+-- =====================================================
+CREATE TABLE t_policy_doc (
+                              id BIGINT PRIMARY KEY,
+                              title VARCHAR(200) NOT NULL,
+                              content TEXT,
+                              keywords VARCHAR(255),
+                              official_url VARCHAR(500),
+                              file_id BIGINT,
+                              doc_status VARCHAR(50) DEFAULT '已发布',
+                              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE t_policy_doc IS '政策知识库文档表';
+COMMENT ON COLUMN t_policy_doc.id IS '政策文档ID';
+COMMENT ON COLUMN t_policy_doc.title IS '政策标题';
+COMMENT ON COLUMN t_policy_doc.content IS '政策正文内容';
+COMMENT ON COLUMN t_policy_doc.keywords IS '关键词，多个关键词可用逗号分隔';
+COMMENT ON COLUMN t_policy_doc.official_url IS '官方链接';
+COMMENT ON COLUMN t_policy_doc.file_id IS '关联文件ID，对应 t_file.id';
+COMMENT ON COLUMN t_policy_doc.doc_status IS '文档状态：草稿/已发布/已归档';
+COMMENT ON COLUMN t_policy_doc.created_at IS '创建时间';
+COMMENT ON COLUMN t_policy_doc.updated_at IS '更新时间';
+
+-- =====================================================
+-- 6. 课程库表
+-- 说明：
+-- 存储课程基础信息，用于学业预警、培养方案比对和选课建议
+-- =====================================================
+CREATE TABLE t_course (
+                          id BIGINT PRIMARY KEY,
+                          course_code VARCHAR(100) NOT NULL,
+                          course_name VARCHAR(200) NOT NULL,
+                          credit NUMERIC(5,2),
+                          course_type VARCHAR(100),
+                          module_type VARCHAR(100),
+                          major VARCHAR(100),
+                          grade VARCHAR(50),
+                          semester VARCHAR(50),
+                          status INTEGER DEFAULT 1,
+                          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE t_course IS '课程库表';
+COMMENT ON COLUMN t_course.id IS '课程ID';
+COMMENT ON COLUMN t_course.course_code IS '课程代码';
+COMMENT ON COLUMN t_course.course_name IS '课程名称';
+COMMENT ON COLUMN t_course.credit IS '学分';
+COMMENT ON COLUMN t_course.course_type IS '课程类型，如必修/选修/通识';
+COMMENT ON COLUMN t_course.module_type IS '培养方案模块，如核心课/专业选修/通识课';
+COMMENT ON COLUMN t_course.major IS '适用专业';
+COMMENT ON COLUMN t_course.grade IS '适用年级';
+COMMENT ON COLUMN t_course.semester IS '开课学期';
+COMMENT ON COLUMN t_course.status IS '课程状态：1正常，0停用';
+COMMENT ON COLUMN t_course.created_at IS '创建时间';
+COMMENT ON COLUMN t_course.updated_at IS '更新时间';
+
+CREATE UNIQUE INDEX uk_course_code ON t_course(course_code);
+
+-- =====================================================
+-- 7. 操作日志表
 -- 说明：
 -- 记录用户操作，便于后续追踪问题和答辩展示
 -- =====================================================
@@ -169,7 +239,7 @@ COMMENT ON COLUMN t_operation_log.error_message IS '错误信息';
 COMMENT ON COLUMN t_operation_log.created_at IS '创建时间';
 
 -- =====================================================
--- 6. 党团事务标准流程表
+-- 8. 党团事务标准流程表
 -- 说明：
 -- 定义入党流程的标准阶段
 -- =====================================================
@@ -189,7 +259,7 @@ COMMENT ON COLUMN t_process_stage.duration IS '标准持续时长，单位可按
 COMMENT ON COLUMN t_process_stage.description IS '阶段说明';
 
 -- =====================================================
--- 7. 学生党团阶段记录表
+-- 9. 学生党团阶段记录表
 -- 说明：
 -- 记录每个学生当前所处党团阶段
 -- =====================================================
@@ -213,9 +283,10 @@ COMMENT ON COLUMN t_student_stage.created_at IS '创建时间';
 COMMENT ON COLUMN t_student_stage.updated_at IS '更新时间';
 
 -- =====================================================
--- 8. 电子证明申请表
+-- 10. 电子证明申请表
 -- 说明：
--- 记录学生在线申请电子证明的流水
+-- 记录学生在线申请电子证明的主申请流水
+-- 一条申请可以对应多条 t_approval_task 审批任务
 -- =====================================================
 CREATE TABLE t_certificate_apply (
                                      id BIGINT PRIMARY KEY,
@@ -239,7 +310,38 @@ COMMENT ON COLUMN t_certificate_apply.created_at IS '创建时间';
 COMMENT ON COLUMN t_certificate_apply.updated_at IS '更新时间';
 
 -- =====================================================
--- 9. 通知公告表
+-- 11. 审批任务表
+-- 说明：
+-- 一个电子证明申请可以对应多个审批任务节点
+-- 用于记录各级老师/管理员的审批状态、意见和处理时间
+-- =====================================================
+CREATE TABLE t_approval_task (
+                                 id BIGINT PRIMARY KEY,
+                                 apply_id BIGINT NOT NULL,
+                                 node_order INTEGER NOT NULL,
+                                 approver_id BIGINT,
+                                 approver_name VARCHAR(100),
+                                 approval_status VARCHAR(50) DEFAULT '待处理',
+                                 opinion VARCHAR(500),
+                                 handled_at TIMESTAMP,
+                                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE t_approval_task IS '电子证明审批任务表';
+COMMENT ON COLUMN t_approval_task.id IS '审批任务ID';
+COMMENT ON COLUMN t_approval_task.apply_id IS '证明申请ID，对应 t_certificate_apply.id';
+COMMENT ON COLUMN t_approval_task.node_order IS '审批节点顺序';
+COMMENT ON COLUMN t_approval_task.approver_id IS '审批人用户ID，对应 t_user.id';
+COMMENT ON COLUMN t_approval_task.approver_name IS '审批人姓名';
+COMMENT ON COLUMN t_approval_task.approval_status IS '审批状态：待处理/已通过/已驳回';
+COMMENT ON COLUMN t_approval_task.opinion IS '审批意见';
+COMMENT ON COLUMN t_approval_task.handled_at IS '审批处理时间';
+COMMENT ON COLUMN t_approval_task.created_at IS '创建时间';
+COMMENT ON COLUMN t_approval_task.updated_at IS '更新时间';
+
+-- =====================================================
+-- 12. 通知公告表
 -- 说明：
 -- 管理员发布精准通知，支持标签和附件
 -- =====================================================
@@ -267,7 +369,7 @@ COMMENT ON COLUMN t_notification.created_at IS '创建时间';
 COMMENT ON COLUMN t_notification.updated_at IS '更新时间';
 
 -- =====================================================
--- 10. 通知已读回执表
+-- 13. 通知已读回执表
 -- 说明：
 -- 记录学生是否确认阅读通知
 -- =====================================================
@@ -311,6 +413,9 @@ VALUES
 -- 可选测试数据
 -- 正式提交时保持注释，不默认插入测试数据
 -- 如果需要测试，可以手动取消注释执行
+-- 注意：
+-- 学生登录时，后端应支持用 student_no 登录：
+-- SELECT * FROM t_user WHERE username = ? OR student_no = ?
 -- =====================================================
 
 -- INSERT INTO t_student (
@@ -333,6 +438,18 @@ VALUES
 -- )
 -- VALUES
 --     (1, '20240001', 1, CURRENT_TIMESTAMP, '进行中');
+
+-- INSERT INTO t_certificate_apply (
+--     id, student_no, certificate_type, apply_status, extra_data, file_id
+-- )
+-- VALUES
+--     (1, '20240001', '在校证明', '待审核', '{"reason":"测试申请"}', NULL);
+
+-- INSERT INTO t_approval_task (
+--     id, apply_id, node_order, approver_id, approver_name, approval_status, opinion
+-- )
+-- VALUES
+--     (1, 1, 1, 2, '测试管理员', '待处理', NULL);
 
 -- INSERT INTO t_notification (
 --     id, title, content, tags, is_urgent, file_id, publisher_id

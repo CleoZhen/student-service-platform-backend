@@ -209,7 +209,37 @@ COMMENT ON COLUMN t_course.updated_at IS '更新时间';
 CREATE UNIQUE INDEX uk_course_code ON t_course(course_code);
 
 -- =====================================================
--- 7. 操作日志表
+-- 7. 培养方案表（JSON 存储）
+-- 说明：
+-- 直接存储前端生成的培养方案 JSON，后续解析也基于该 JSON
+-- =====================================================
+CREATE TABLE t_training_plan (
+                                 id BIGINT PRIMARY KEY,
+                                 major VARCHAR(100) NOT NULL,
+                                 grade VARCHAR(50) NOT NULL,
+                                 version VARCHAR(50) NOT NULL,
+                                 remark VARCHAR(500),
+                                 json_content TEXT NOT NULL,
+                                 course_count INTEGER,
+                                 total_credits DECIMAL(10, 2),
+                                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+COMMENT ON TABLE t_training_plan IS '培养方案表（JSON 存储）';
+COMMENT ON COLUMN t_training_plan.id IS '记录ID';
+COMMENT ON COLUMN t_training_plan.major IS '专业';
+COMMENT ON COLUMN t_training_plan.grade IS '年级';
+COMMENT ON COLUMN t_training_plan.version IS '版本';
+COMMENT ON COLUMN t_training_plan.remark IS '备注';
+COMMENT ON COLUMN t_training_plan.json_content IS '培养方案JSON内容';
+COMMENT ON COLUMN t_training_plan.course_count IS '课程数';
+COMMENT ON COLUMN t_training_plan.total_credits IS '总学分';
+COMMENT ON COLUMN t_training_plan.created_at IS '创建时间';
+COMMENT ON COLUMN t_training_plan.updated_at IS '更新时间';
+
+-- =====================================================
+-- 8. 操作日志表
 -- 说明：
 -- 记录用户操作，便于后续追踪问题和答辩展示
 -- =====================================================
@@ -239,7 +269,7 @@ COMMENT ON COLUMN t_operation_log.error_message IS '错误信息';
 COMMENT ON COLUMN t_operation_log.created_at IS '创建时间';
 
 -- =====================================================
--- 8. 党团事务标准流程表
+-- 9. 党团事务标准流程表
 -- 说明：
 -- 定义入党流程的标准阶段
 -- =====================================================
@@ -259,7 +289,7 @@ COMMENT ON COLUMN t_process_stage.duration IS '标准持续时长，单位可按
 COMMENT ON COLUMN t_process_stage.description IS '阶段说明';
 
 -- =====================================================
--- 9. 学生党团阶段记录表
+-- 10. 学生党团阶段记录表
 -- 说明：
 -- 记录每个学生当前所处党团阶段
 -- =====================================================
@@ -283,7 +313,7 @@ COMMENT ON COLUMN t_student_stage.created_at IS '创建时间';
 COMMENT ON COLUMN t_student_stage.updated_at IS '更新时间';
 
 -- =====================================================
--- 10. 电子证明申请表
+-- 11. 电子证明申请表
 -- 说明：
 -- 记录学生在线申请电子证明的主申请流水
 -- 一条申请可以对应多条 t_approval_task 审批任务
@@ -310,7 +340,7 @@ COMMENT ON COLUMN t_certificate_apply.created_at IS '创建时间';
 COMMENT ON COLUMN t_certificate_apply.updated_at IS '更新时间';
 
 -- =====================================================
--- 11. 审批任务表
+-- 12. 审批任务表
 -- 说明：
 -- 一个电子证明申请可以对应多个审批任务节点
 -- 用于记录各级老师/管理员的审批状态、意见和处理时间
@@ -341,7 +371,7 @@ COMMENT ON COLUMN t_approval_task.created_at IS '创建时间';
 COMMENT ON COLUMN t_approval_task.updated_at IS '更新时间';
 
 -- =====================================================
--- 12. 通知公告表
+-- 13. 通知公告表
 -- 说明：
 -- 管理员发布精准通知，支持标签和附件
 -- =====================================================
@@ -369,7 +399,7 @@ COMMENT ON COLUMN t_notification.created_at IS '创建时间';
 COMMENT ON COLUMN t_notification.updated_at IS '更新时间';
 
 -- =====================================================
--- 13. 通知已读回执表
+-- 14. 通知已读回执表
 -- 说明：
 -- 记录学生是否确认阅读通知
 -- =====================================================
@@ -397,6 +427,9 @@ INSERT INTO t_role (id, role_code, role_name, description)
 VALUES
     (1, 'student', '学生', '微信小程序学生端用户'),
     (2, 'admin', '管理员', 'Web后台管理员');
+--  增加的初始用户
+INSERT INTO t_user (id, username, password, role_code, student_no, wechat_openid, status)
+VALUES (1001, 'admin', 'e10adc3949ba59abbe56e057f20f883e', 'admin', NULL, NULL, 1);
 
 -- =====================================================
 -- 初始化党团流程标准阶段

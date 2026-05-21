@@ -23,16 +23,55 @@ public class WarningRecordService {
 
     public Long saveFromPythonResponse(Long userId, String studentNo, Long transcriptFileId, Object pythonResponse) {
         Map<String, Object> root = asMap(pythonResponse);
-        Map<String, Object> data = asMap(root.get("data"));
-        List<Object> courses = asList(data.get("courses"));
-        Map<String, Object> report = asMap(data.get("report"));
+        Map<String, Object> pythonResponseMap = asMap(root.get("pythonResponse"));
+        Map<String, Object> data = firstMap(
+                pythonResponseMap.get("data"),
+                root.get("data"),
+                root
+        );
+        Map<String, Object> nestedData = asMap(data.get("data"));
+        Map<String, Object> report = firstMap(
+                nestedData.get("report"),
+                data.get("report"),
+                root.get("report")
+        );
 
-        String warningLevel = asString(report.get("warning_level"));
-        BigDecimal totalEarnedCredits = asBigDecimal(report.get("total_earned_credits"));
+        if (report.isEmpty() && hasAnyKey(data, "warning_level", "riskLevel", "missingCredits", "suggestions")) {
+            report = data;
+        }
 
-        List<Object> failedCourses = asList(report.get("failed_courses"));
-        List<Object> missingCourses = asList(report.get("missing_core_courses"));
-        List<Object> suggestions = asList(report.get("course_suggestions"));
+        List<Object> courses = firstList(
+                nestedData.get("courses"),
+                data.get("courses"),
+                report.get("courses"),
+                root.get("courses")
+        );
+
+        String warningLevel = firstString(
+                report.get("warning_level"),
+                report.get("riskLevel"),
+                report.get("warningLevel")
+        );
+        BigDecimal totalEarnedCredits = firstBigDecimal(
+                report.get("total_earned_credits"),
+                report.get("totalCredits"),
+                report.get("earnedCredits")
+        );
+
+        List<Object> failedCourses = firstList(
+                report.get("failed_courses"),
+                report.get("failedCourses")
+        );
+        List<Object> missingCourses = firstList(
+                report.get("missing_core_courses"),
+                report.get("missingCourses"),
+                report.get("missingCoreCourses")
+        );
+        List<Object> suggestions = firstList(
+                report.get("course_suggestions"),
+                report.get("suggestions"),
+                data.get("suggestions")
+        );
 
         int courseCount = courses == null ? 0 : courses.size();
         int failedCourseCount = failedCourses == null ? 0 : failedCourses.size();
@@ -43,14 +82,14 @@ public class WarningRecordService {
         String sql = """
                 INSERT INTO t_warning_record
                 (id, user_id, student_no, transcript_file_id, training_plan_id, warning_level,
-                 total_earned_credits, course_count, matched_course_count, failed_course_count, missing_course_count,
-                 parsed_courses_json, matched_courses_json, failed_courses_json, missing_courses_json,
-                 course_suggestions_json, training_plan_snapshot_json, analyze_status, remark, created_at, updated_at)
+                 total_earned_credits, course_count, core_course_count, failed_course_count, missing_course_count,
+                 parsed_courses_json, core_courses_json, failed_courses_json, missing_courses_json,
+                 suggestions_json, analysis_status, error_message, created_at, updated_at)
                 VALUES
                 (?, ?, ?, ?, ?, ?,
                  ?, ?, ?, ?, ?,
                  ?, ?, ?, ?,
-                 ?, ?, ?, ?, ?, ?)
+                 ?, ?, ?, ?, ?)
                 """;
 
         jdbcTemplate.update(
@@ -63,17 +102,16 @@ public class WarningRecordService {
                 warningLevel == null || warningLevel.isBlank() ? "未知" : warningLevel,
                 totalEarnedCredits,
                 courseCount,
-                0,
+                0, // core_course_count
                 failedCourseCount,
                 missingCourseCount,
-                toJson(courses),
-                null,
+                toJson(courses == null ? List.of() : courses),
+                null, // core_courses_json
                 toJson(failedCourses),
                 toJson(missingCourses),
                 toJson(suggestions),
-                null,
-                1,
-                null,
+                1, // analysis_status
+                null, // error_message
                 LocalDateTime.now(),
                 LocalDateTime.now()
         );
@@ -90,6 +128,54 @@ public class WarningRecordService {
         } catch (JsonProcessingException e) {
             return null;
         }
+    }
+
+    private boolean hasAnyKey(Map<String, Object> map, String... keys) {
+        for (String key : keys) {
+            if (map.containsKey(key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Map<String, Object> firstMap(Object... values) {
+        for (Object value : values) {
+            Map<String, Object> map = asMap(value);
+            if (!map.isEmpty()) {
+                return map;
+            }
+        }
+        return Map.of();
+    }
+
+    private List<Object> firstList(Object... values) {
+        for (Object value : values) {
+            List<Object> list = asList(value);
+            if (list != null) {
+                return list;
+            }
+        }
+        return null;
+    }
+
+    private String firstString(Object... values) {
+        for (Object value : values) {
+            String text = asString(value);
+            if (text != null && !text.isBlank()) {
+                return text;
+            }
+        }
+        return null;
+    }
+
+    private BigDecimal firstBigDecimal(Object... values) {
+        for (Object value : values) {
+            if (value != null) {
+                return asBigDecimal(value);
+            }
+        }
+        return BigDecimal.ZERO;
     }
 
     @SuppressWarnings("unchecked")

@@ -3,7 +3,10 @@ package com.college.student_service_platform.controller;
 import com.college.student_service_platform.common.Result;
 import com.college.student_service_platform.dto.AiAskRequest;
 import com.college.student_service_platform.service.external.AiServiceClient;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api")
@@ -18,12 +21,12 @@ public class AiProxyController {
     @PostMapping("/student/ai/ask")
     public Result<Object> ask(@RequestBody AiAskRequest request) {
         Object response = aiServiceClient.ask(request);
-        return Result.success("AI问答调用成功", response);
+        return Result.success("AI ask succeeded", response);
     }
 
     @PostMapping("/admin/ai/ingest-all")
     public Result<Object> ingestAll() {
         Object response = aiServiceClient.ingestAll();
-        return Result.success("知识库更新调用成功", response);
+        return Result.success("Knowledge base ingest succeeded", response);
     }
 }

@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/file")
@@ -33,6 +34,13 @@ public class FileController {
     ) throws IOException {
         FileUploadResponse response = fileService.uploadFile(file, businessType, uploaderId);
         return Result.success("文件上传成功", response);
+    }
+
+    @GetMapping("/list")
+    public Result<List<FileRecord>> listFiles(
+            @RequestParam(value = "businessType", required = false) String businessType
+    ) {
+        return Result.success("文件列表查询成功", fileService.listFiles(businessType));
     }
 
     @GetMapping("/download/{fileId}")

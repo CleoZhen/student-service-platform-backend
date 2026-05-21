@@ -9,7 +9,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.nio.file.*;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -86,23 +89,40 @@ public class FileService {
                 WHERE id = ?
                 """;
 
-        return jdbcTemplate.queryForObject(sql, (rs, rowNum) -> {
-            FileRecord record = new FileRecord();
-            record.setId(rs.getLong("id"));
-            record.setOriginalName(rs.getString("original_name"));
-            record.setStoredName(rs.getString("stored_name"));
-            record.setFilePath(rs.getString("file_path"));
-            record.setFileType(rs.getString("file_type"));
-            record.setFileSize(rs.getLong("file_size"));
-            record.setUploaderId(rs.getLong("uploader_id"));
-            record.setBusinessType(rs.getString("business_type"));
-            record.setCreatedAt(rs.getTimestamp("created_at").toLocalDateTime());
-            return record;
-        }, fileId);
+        return jdbcTemplate.queryForObject(sql, this::mapFileRecord, fileId);
+    }
+
+    public List<FileRecord> listFiles(String businessType) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT id, original_name, stored_name, file_path, file_type, file_size, uploader_id, business_type, created_at
+                FROM t_file
+                """);
+
+        if (businessType != null && !businessType.isBlank()) {
+            sql.append(" WHERE business_type = ? ORDER BY created_at DESC");
+            return jdbcTemplate.query(sql.toString(), this::mapFileRecord, businessType.trim());
+        }
+
+        sql.append(" ORDER BY created_at DESC");
+        return jdbcTemplate.query(sql.toString(), this::mapFileRecord);
     }
 
     public Path getFilePath(FileRecord fileRecord) {
         return Paths.get(fileRecord.getFilePath()).toAbsolutePath().normalize();
+    }
+
+    private FileRecord mapFileRecord(ResultSet rs, int rowNum) throws SQLException {
+        FileRecord record = new FileRecord();
+        record.setId(rs.getLong("id"));
+        record.setOriginalName(rs.getString("original_name"));
+        record.setStoredName(rs.getString("stored_name"));
+        record.setFilePath(rs.getString("file_path"));
+        record.setFileType(rs.getString("file_type"));
+        record.setFileSize(rs.getLong("file_size"));
+        record.setUploaderId(rs.getLong("uploader_id"));
+        record.setBusinessType(rs.getString("business_type"));
+        record.setCreatedAt(rs.getTimestamp("created_at").toLocalDateTime());
+        return record;
     }
 
     private String getFileExtension(String originalName) {

@@ -2,12 +2,14 @@ package com.college.student_service_platform.controller;
 
 import com.college.student_service_platform.common.Result;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/student/certificate")
+@RequestMapping({"/api/student/certificate", "/api/student/cert"})
 public class CertificateController {
 
     private final JdbcTemplate jdbcTemplate;
@@ -18,11 +20,19 @@ public class CertificateController {
 
     @PostMapping("/apply")
     public Result<Void> apply(
-            @RequestParam("studentNo") String studentNo,
-            @RequestParam("certificateType") String certificateType,
-            @RequestParam("extraData") String extraData
+            @RequestBody(required = false) Map<String, Object> requestBody,
+            @RequestParam(value = "studentNo", required = false) String studentNoParam,
+            @RequestParam(value = "certificateType", required = false) String certificateTypeParam,
+            @RequestParam(value = "extraData", required = false) String extraDataParam
     ) {
-        // 初始申请的 apply_status 设定为 '待审核'
+        String studentNo = pickFirstNonBlank(studentNoParam, bodyValue(requestBody, "studentNo"));
+        String certificateType = pickFirstNonBlank(certificateTypeParam, bodyValue(requestBody, "certificateType"));
+        String extraData = pickFirstNonBlank(extraDataParam, bodyValue(requestBody, "extraData"));
+
+        if (!StringUtils.hasText(studentNo) || !StringUtils.hasText(certificateType) || !StringUtils.hasText(extraData)) {
+            return Result.fail("studentNo、certificateType、extraData 不能为空");
+        }
+
         String sql = "INSERT INTO t_certificate_apply (id, student_no, certificate_type, apply_status, extra_data) " +
                 "VALUES (?, ?, ?, '待审核', ?)";
 
@@ -33,12 +43,29 @@ public class CertificateController {
 
     @GetMapping("/history")
     public Result<List<Map<String, Object>>> getHistory(@RequestParam("studentNo") String studentNo) {
-        // 映射查询记录，严格转换 apply_status
-        String sql = "SELECT id, student_no AS studentNo, certificate_type AS certificateType, " +
-                "apply_status AS applyStatus, extra_data AS extraData, created_at AS createdAt " +
+        String sql = "SELECT id, student_no AS \"studentNo\", certificate_type AS \"certificateType\", " +
+                "apply_status AS \"applyStatus\", extra_data AS \"extraData\", file_id AS \"fileId\", " +
+                "TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') AS \"createdAt\" " +
                 "FROM t_certificate_apply WHERE student_no = ? ORDER BY created_at DESC";
 
         List<Map<String, Object>> history = jdbcTemplate.queryForList(sql, studentNo);
         return Result.success("申请历史拉取成功", history);
+    }
+
+    private String bodyValue(Map<String, Object> requestBody, String key) {
+        if (requestBody == null) {
+            return null;
+        }
+        Object value = requestBody.get(key);
+        return value == null ? null : String.valueOf(value).trim();
+    }
+
+    private String pickFirstNonBlank(String... values) {
+        for (String value : values) {
+            if (StringUtils.hasText(value)) {
+                return value.trim();
+            }
+        }
+        return null;
     }
 }

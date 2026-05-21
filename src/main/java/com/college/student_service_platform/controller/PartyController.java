@@ -2,7 +2,11 @@ package com.college.student_service_platform.controller;
 
 import com.college.student_service_platform.common.Result;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -28,46 +32,49 @@ public class PartyController {
         int currentStageId = partyStageId == null ? 0 : partyStageId;
 
         List<Map<String, Object>> stages = jdbcTemplate.queryForList(
-                "SELECT stage_id, stage_name, order_num FROM t_process_stage ORDER BY order_num ASC"
+                "SELECT stage_id, stage_name, order_num, duration, description FROM t_process_stage ORDER BY order_num ASC"
         );
 
         List<Map<String, Object>> progressList = new ArrayList<>();
 
         Map<String, Object> notApplied = new HashMap<>();
-        notApplied.put("stageName", "未申请");
+        notApplied.put("stageId", 0);
+        notApplied.put("stageName", "\u672a\u7533\u8bf7");
+        notApplied.put("orderNum", 0);
+        notApplied.put("duration", null);
+        notApplied.put("stageDescription", null);
         notApplied.put("startDate", null);
-        if (currentStageId == 0) {
-            notApplied.put("stageStatus", "进行中");
-        } else {
-            notApplied.put("stageStatus", "已完成");
-        }
+        notApplied.put("stageStatus", currentStageId == 0 ? "\u8fdb\u884c\u4e2d" : "\u5df2\u5b8c\u6210");
         progressList.add(notApplied);
 
-        for (Map<String, Object> s : stages) {
-            Object stageIdObj = s.get("stage_id");
+        for (Map<String, Object> stage : stages) {
+            Object stageIdObj = stage.get("stage_id");
             if (!(stageIdObj instanceof Number)) {
                 continue;
             }
-            int stageId = ((Number) stageIdObj).intValue();
-            String stageName = s.get("stage_name") == null ? "" : String.valueOf(s.get("stage_name"));
 
+            int stageId = ((Number) stageIdObj).intValue();
             Map<String, Object> row = new HashMap<>();
-            row.put("stageName", stageName);
+            row.put("stageId", stageId);
+            row.put("stageName", stage.get("stage_name"));
+            row.put("orderNum", stage.get("order_num"));
+            row.put("duration", stage.get("duration"));
+            row.put("stageDescription", stage.get("description"));
             row.put("startDate", null);
 
             if (currentStageId <= 0) {
-                row.put("stageStatus", "未开始");
+                row.put("stageStatus", "\u672a\u5f00\u59cb");
             } else if (stageId < currentStageId) {
-                row.put("stageStatus", "已完成");
+                row.put("stageStatus", "\u5df2\u5b8c\u6210");
             } else if (stageId == currentStageId) {
-                row.put("stageStatus", "进行中");
+                row.put("stageStatus", "\u8fdb\u884c\u4e2d");
             } else {
-                row.put("stageStatus", "未开始");
+                row.put("stageStatus", "\u672a\u5f00\u59cb");
             }
 
             progressList.add(row);
         }
 
-        return Result.success("党团进度查询成功", progressList);
+        return Result.success("Party progress loaded", progressList);
     }
 }

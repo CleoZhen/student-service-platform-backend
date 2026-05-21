@@ -5,8 +5,17 @@ import com.college.student_service_platform.dto.StudentImportRequest;
 import com.college.student_service_platform.dto.StudentImportResult;
 import com.college.student_service_platform.dto.StudentListItem;
 import com.college.student_service_platform.service.StudentService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -19,16 +28,18 @@ public class StudentController {
 
     private final JdbcTemplate jdbcTemplate;
     private final StudentService studentService;
+    private final ObjectMapper objectMapper;
 
-    public StudentController(JdbcTemplate jdbcTemplate, StudentService studentService) {
+    public StudentController(JdbcTemplate jdbcTemplate, StudentService studentService, ObjectMapper objectMapper) {
         this.jdbcTemplate = jdbcTemplate;
         this.studentService = studentService;
+        this.objectMapper = objectMapper;
     }
 
     @PostMapping("/import")
     public Result<StudentImportResult> importStudents(@RequestBody StudentImportRequest request) {
         StudentImportResult result = studentService.importStudents(request == null ? null : request.getStudents());
-        return Result.success("导入成功", result);
+        return Result.success("Import succeeded", result);
     }
 
     @GetMapping("/list")
@@ -47,44 +58,75 @@ public class StudentController {
         Map<String, Object> responseData = new HashMap<>();
 
         try {
-            // 1. 查询你新建的 t_student 表，获取真实姓名、专业和年级
             String sqlStudent = "SELECT name, major, grade FROM t_student WHERE student_no = ?";
             List<Map<String, Object>> students = jdbcTemplate.queryForList(sqlStudent, account);
 
             Map<String, Object> userInfo = new HashMap<>();
             if (!students.isEmpty()) {
-                // 如果在表里找到了这个学生
                 Map<String, Object> stu = students.get(0);
                 userInfo.put("name", stu.get("name"));
                 userInfo.put("major", stu.get("major"));
                 userInfo.put("grade", stu.get("grade"));
             } else {
-                // 容错处理：如果查不到，给个默认值
-                userInfo.put("name", "未录入");
-                userInfo.put("major", "未分配专业");
-                userInfo.put("grade", "未知年级");
+                userInfo.put("name", "\u672a\u5f55\u5165");
+                userInfo.put("major", "\u672a\u5206\u914d\u4e13\u4e1a");
+                userInfo.put("grade", "\u672a\u77e5\u5e74\u7ea7");
             }
             responseData.put("userInfo", userInfo);
 
-            // 2. 课程列表 (以后有了成绩表，再把这里的假数据换成查数据库的真实 SQL)
             List<Map<String, Object>> courses = new ArrayList<>();
-            Map<String, Object> c1 = new HashMap<>(); c1.put("name", "高等数学Ⅰ"); c1.put("credits", 5);
-            Map<String, Object> c2 = new HashMap<>(); c2.put("name", "Java程序设计"); c2.put("credits", 4);
-            Map<String, Object> c3 = new HashMap<>(); c3.put("name", "数据库原理"); c3.put("credits", 3);
-            courses.add(c1);
-            courses.add(c2);
-            courses.add(c3);
+            double totalCredits = 0.0;
+
+            try {
+                String sqlWarning = """
+                        SELECT parsed_courses_json, total_earned_credits
+                        FROM t_warning_record
+                        WHERE student_no = ?
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                        """;
+                List<Map<String, Object>> warningRecords = jdbcTemplate.queryForList(sqlWarning, account);
+
+                if (!warningRecords.isEmpty()) {
+                    Map<String, Object> record = warningRecords.get(0);
+                    String coursesJson = record.get("parsed_courses_json") == null
+                            ? null
+                            : String.valueOf(record.get("parsed_courses_json"));
+
+                    if (coursesJson != null && !coursesJson.isBlank()) {
+                        courses = parseCourses(coursesJson);
+                    }
+
+                    Object creditsObj = record.get("total_earned_credits");
+                    if (creditsObj != null) {
+                        totalCredits = Double.parseDouble(creditsObj.toString());
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
             responseData.put("courses", courses);
+            responseData.put("totalCredits", totalCredits);
 
-            // 3. 学分和绩点统计 (以后也可以通过 SQL 从成绩表动态聚合 SUM 和 AVG)
-            responseData.put("totalCredits", 12);
-            responseData.put("gpa", 3.92);
-
-            return Result.success("获取信息成功", responseData);
-
+            return Result.success("Student info loaded", responseData);
         } catch (Exception e) {
             e.printStackTrace();
-            return Result.fail("查询学生信息失败: " + e.getMessage());
+            return Result.fail("Failed to query student info: " + e.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> parseCourses(String coursesJson) throws Exception {
+        try {
+            return objectMapper.readValue(coursesJson, new TypeReference<List<Map<String, Object>>>() {});
+        } catch (Exception e) {
+            Map<String, Object> reportData = objectMapper.readValue(coursesJson, new TypeReference<Map<String, Object>>() {});
+            Object coursesObj = reportData.get("courses");
+            if (coursesObj instanceof List<?>) {
+                return (List<Map<String, Object>>) coursesObj;
+            }
+            return new ArrayList<>();
         }
     }
 }

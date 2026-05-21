@@ -17,12 +17,12 @@ public class AiServiceClient {
     }
 
     public Object ask(AiAskRequest request) {
-        String url = properties.getAiServiceBaseUrl() + "/api/student/ask";
+        String url = properties.getAiServiceBaseUrl() + "/api/student/ai/ask";
         return restTemplate.postForObject(url, request, Object.class);
     }
 
     public Object ingestAll() {
-        String url = properties.getAiServiceBaseUrl() + "/api/admin/ingest_all";
+        String url = properties.getAiServiceBaseUrl() + "/api/admin/ai/ingest-all";
         return restTemplate.postForObject(url, null, Object.class);
     }
 }

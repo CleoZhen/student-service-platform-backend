@@ -7,8 +7,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.HexFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
@@ -45,6 +48,7 @@ public class StudentService {
                 int status = s.getStatus() == null ? 1 : (s.getStatus() == 0 ? 0 : 1);
                 String password = normalize(s.getPassword());
                 if (password.isEmpty()) password = "123456";
+                password = toMd5IfNeeded(password);
                 String wechatOpenid = normalize(s.getWechatOpenid());
                 Timestamp now = Timestamp.valueOf(LocalDateTime.now());
 
@@ -103,6 +107,7 @@ public class StudentService {
             int status = s.getStatus() == null ? 1 : (s.getStatus() == 0 ? 0 : 1);
             String password = normalize(s.getPassword());
             if (password.isEmpty()) password = "123456";
+            password = toMd5IfNeeded(password);
             String wechatOpenid = normalize(s.getWechatOpenid());
 
             Timestamp now = Timestamp.valueOf(LocalDateTime.now());
@@ -279,5 +284,36 @@ public class StudentService {
 
     private String normalize(String v) {
         return v == null ? "" : v.trim();
+    }
+
+    private String toMd5IfNeeded(String password) {
+        String p = normalize(password);
+        if (p.isEmpty()) return "";
+        if (isMd5(p)) return p.toLowerCase();
+        return md5Hex(p);
+    }
+
+    private boolean isMd5(String v) {
+        if (v == null) return false;
+        String s = v.trim();
+        if (s.length() != 32) return false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            boolean ok = (c >= '0' && c <= '9')
+                    || (c >= 'a' && c <= 'f')
+                    || (c >= 'A' && c <= 'F');
+            if (!ok) return false;
+        }
+        return true;
+    }
+
+    private String md5Hex(String s) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] digest = md.digest(s.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (Exception e) {
+            return "";
+        }
     }
 }

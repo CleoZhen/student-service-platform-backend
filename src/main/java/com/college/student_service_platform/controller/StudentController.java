@@ -1,6 +1,10 @@
 package com.college.student_service_platform.controller;
 
 import com.college.student_service_platform.common.Result;
+import com.college.student_service_platform.dto.StudentImportRequest;
+import com.college.student_service_platform.dto.StudentImportResult;
+import com.college.student_service_platform.dto.StudentListItem;
+import com.college.student_service_platform.service.StudentService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,9 +18,28 @@ import java.util.Map;
 public class StudentController {
 
     private final JdbcTemplate jdbcTemplate;
+    private final StudentService studentService;
 
-    public StudentController(JdbcTemplate jdbcTemplate) {
+    public StudentController(JdbcTemplate jdbcTemplate, StudentService studentService) {
         this.jdbcTemplate = jdbcTemplate;
+        this.studentService = studentService;
+    }
+
+    @PostMapping("/import")
+    public Result<StudentImportResult> importStudents(@RequestBody StudentImportRequest request) {
+        StudentImportResult result = studentService.importStudents(request == null ? null : request.getStudents());
+        return Result.success("导入成功", result);
+    }
+
+    @GetMapping("/list")
+    public Result<List<StudentListItem>> listStudents(@RequestParam(value = "keyword", required = false) String keyword) {
+        return Result.success(studentService.listStudents(keyword));
+    }
+
+    @DeleteMapping("/{studentNo}")
+    public Result<Void> deleteStudent(@PathVariable String studentNo) {
+        studentService.deleteByStudentNo(studentNo);
+        return Result.success();
     }
 
     @GetMapping("/info")

@@ -32,7 +32,7 @@ public class AcademicWarningClient {
         return restTemplate.postForObject(url, request, Object.class);
     }
 
-    public Object analyzeTranscript(MultipartFile file, String studentNo) throws IOException {
+    public Object analyzeTranscript(MultipartFile file, String studentNo, String trainingPlanJson) throws IOException {
         String url = properties.getWarningServiceBaseUrl() + "/api/student/warning/analyze";
 
         ByteArrayResource fileResource = new ByteArrayResource(file.getBytes()) {
@@ -45,6 +45,9 @@ public class AcademicWarningClient {
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", fileResource);
         body.add("studentNo", studentNo);
+        if (trainingPlanJson != null && !trainingPlanJson.isBlank()) {
+            body.add("training_plan", trainingPlanJson);
+        }
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);

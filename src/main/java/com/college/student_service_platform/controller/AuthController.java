@@ -1,13 +1,13 @@
 package com.college.student_service_platform.controller;
 
 import com.college.student_service_platform.common.Result;
+import com.college.student_service_platform.service.AdminAuthService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
@@ -19,9 +19,11 @@ import java.util.Map;
 public class AuthController {
 
     private final JdbcTemplate jdbcTemplate;
+    private final AdminAuthService adminAuthService;
 
-    public AuthController(JdbcTemplate jdbcTemplate) {
+    public AuthController(JdbcTemplate jdbcTemplate, AdminAuthService adminAuthService) {
         this.jdbcTemplate = jdbcTemplate;
+        this.adminAuthService = adminAuthService;
     }
 
     @PostMapping("/login")
@@ -54,8 +56,11 @@ public class AuthController {
             }
             userData.remove("password");
 
-            String safeAccount = URLEncoder.encode(account, StandardCharsets.UTF_8);
-            userData.put("token", "mock_jwt_token_for_" + safeAccount);
+            String subject = "student".equals(role)
+                    ? String.valueOf(userData.getOrDefault("student_no", account))
+                    : String.valueOf(userData.getOrDefault("username", account));
+            String token = adminAuthService.getJwtUtil().createToken(subject, String.valueOf(userData.get("role_code")), 24 * 60 * 60);
+            userData.put("token", token);
 
             return Result.success("Login succeeded", userData);
         } catch (Exception e) {

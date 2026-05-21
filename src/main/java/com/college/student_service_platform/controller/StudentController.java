@@ -76,10 +76,11 @@ public class StudentController {
 
             List<Map<String, Object>> courses = new ArrayList<>();
             double totalCredits = 0.0;
+            double gpa = 0.0;
 
             try {
                 String sqlWarning = """
-                        SELECT parsed_courses_json, total_earned_credits
+                        SELECT parsed_courses_json, total_earned_credits, official_gpa
                         FROM t_warning_record
                         WHERE student_no = ?
                         ORDER BY created_at DESC
@@ -101,6 +102,11 @@ public class StudentController {
                     if (creditsObj != null) {
                         totalCredits = Double.parseDouble(creditsObj.toString());
                     }
+
+                    Object gpaObj = record.get("official_gpa");
+                    if (gpaObj != null) {
+                        gpa = Double.parseDouble(gpaObj.toString());
+                    }
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -108,6 +114,7 @@ public class StudentController {
 
             responseData.put("courses", courses);
             responseData.put("totalCredits", totalCredits);
+            responseData.put("gpa", gpa);
 
             return Result.success("Student info loaded", responseData);
         } catch (Exception e) {

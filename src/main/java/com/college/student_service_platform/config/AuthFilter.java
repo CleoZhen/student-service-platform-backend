@@ -32,6 +32,7 @@ public class AuthFilter extends OncePerRequestFilter {
         if (uri.equals("/api/health")) return true;
         if (uri.startsWith("/api/test/")) return true;
         if (uri.equals("/api/geeker/login")) return true;
+        if (uri.equals("/api/auth/login")) return true;
         if (uri.startsWith("/api/file/download/")) return true;
         return false;
     }
@@ -54,10 +55,19 @@ public class AuthFilter extends OncePerRequestFilter {
 
         try {
             Map<String, Object> payload = adminAuthService.getJwtUtil().verifyToken(token);
-            Object role = payload.get("role");
-            if (role == null || !"admin".equals(String.valueOf(role))) {
-                writeJson(response, Result.fail(403, "无权限"));
-                return;
+            String role = String.valueOf(payload.getOrDefault("role", ""));
+            String uri = request.getRequestURI();
+
+            if (uri != null && (uri.startsWith("/api/student/") || uri.equals("/api/file/list"))) {
+                if (!"student".equals(role) && !"admin".equals(role)) {
+                    writeJson(response, Result.fail(403, "无权限"));
+                    return;
+                }
+            } else {
+                if (!"admin".equals(role)) {
+                    writeJson(response, Result.fail(403, "无权限"));
+                    return;
+                }
             }
         } catch (Exception e) {
             writeJson(response, Result.fail(401, "登录失效"));

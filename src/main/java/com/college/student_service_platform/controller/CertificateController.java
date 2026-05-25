@@ -1,6 +1,8 @@
 package com.college.student_service_platform.controller;
 
 import com.college.student_service_platform.common.Result;
+import com.college.student_service_platform.dto.CertificateApplySubmitRequest;
+import com.college.student_service_platform.service.CertificateApplyService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
@@ -13,13 +15,15 @@ import java.util.Map;
 public class CertificateController {
 
     private final JdbcTemplate jdbcTemplate;
+    private final CertificateApplyService certificateApplyService;
 
-    public CertificateController(JdbcTemplate jdbcTemplate) {
+    public CertificateController(JdbcTemplate jdbcTemplate, CertificateApplyService certificateApplyService) {
         this.jdbcTemplate = jdbcTemplate;
+        this.certificateApplyService = certificateApplyService;
     }
 
     @PostMapping("/apply")
-    public Result<Void> apply(
+    public Result<Long> apply(
             @RequestBody(required = false) Map<String, Object> requestBody,
             @RequestParam(value = "studentNo", required = false) String studentNoParam,
             @RequestParam(value = "certificateType", required = false) String certificateTypeParam,
@@ -29,16 +33,16 @@ public class CertificateController {
         String certificateType = pickFirstNonBlank(certificateTypeParam, bodyValue(requestBody, "certificateType"));
         String extraData = pickFirstNonBlank(extraDataParam, bodyValue(requestBody, "extraData"));
 
-        if (!StringUtils.hasText(studentNo) || !StringUtils.hasText(certificateType) || !StringUtils.hasText(extraData)) {
-            return Result.fail("studentNo、certificateType、extraData 不能为空");
+        if (!StringUtils.hasText(studentNo) || !StringUtils.hasText(certificateType)) {
+            return Result.fail("studentNo、certificateType 不能为空");
         }
 
-        String sql = "INSERT INTO t_certificate_apply (id, student_no, certificate_type, apply_status, extra_data) " +
-                "VALUES (?, ?, ?, '待审核', ?)";
-
-        long mockId = System.currentTimeMillis();
-        int rows = jdbcTemplate.update(sql, mockId, studentNo, certificateType, extraData);
-        return rows > 0 ? Result.success("证明申请提交成功", null) : Result.fail("申请提交失败");
+        CertificateApplySubmitRequest request = new CertificateApplySubmitRequest();
+        request.setStudentNo(studentNo);
+        request.setCertificateType(certificateType);
+        request.setExtraData(extraData);
+        Long applyId = certificateApplyService.submit(request);
+        return Result.success("证明申请提交成功", applyId);
     }
 
     @GetMapping("/history")

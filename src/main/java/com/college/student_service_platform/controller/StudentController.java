@@ -76,11 +76,10 @@ public class StudentController {
 
             List<Map<String, Object>> courses = new ArrayList<>();
             double totalCredits = 0.0;
-            double gpa = 0.0;
 
             try {
                 String sqlWarning = """
-                        SELECT parsed_courses_json, total_earned_credits, official_gpa
+                        SELECT parsed_courses_json, total_earned_credits
                         FROM t_warning_record
                         WHERE student_no = ?
                         ORDER BY created_at DESC
@@ -102,11 +101,6 @@ public class StudentController {
                     if (creditsObj != null) {
                         totalCredits = Double.parseDouble(creditsObj.toString());
                     }
-
-                    Object gpaObj = record.get("official_gpa");
-                    if (gpaObj != null) {
-                        gpa = Double.parseDouble(gpaObj.toString());
-                    }
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -114,7 +108,6 @@ public class StudentController {
 
             responseData.put("courses", courses);
             responseData.put("totalCredits", totalCredits);
-            responseData.put("gpa", gpa);
 
             return Result.success("Student info loaded", responseData);
         } catch (Exception e) {
@@ -125,15 +118,48 @@ public class StudentController {
 
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> parseCourses(String coursesJson) throws Exception {
+        List<Map<String, Object>> rawCourses;
         try {
-            return objectMapper.readValue(coursesJson, new TypeReference<List<Map<String, Object>>>() {});
+            rawCourses = objectMapper.readValue(coursesJson, new TypeReference<List<Map<String, Object>>>() {});
         } catch (Exception e) {
             Map<String, Object> reportData = objectMapper.readValue(coursesJson, new TypeReference<Map<String, Object>>() {});
             Object coursesObj = reportData.get("courses");
-            if (coursesObj instanceof List<?>) {
-                return (List<Map<String, Object>>) coursesObj;
-            }
-            return new ArrayList<>();
+            rawCourses = coursesObj instanceof List<?> ? (List<Map<String, Object>>) coursesObj : new ArrayList<>();
         }
+
+        List<Map<String, Object>> normalized = new ArrayList<>();
+        for (Map<String, Object> course : rawCourses) {
+            String name = firstNonBlank(course.get("name"), course.get("courseName"), course.get("course_name"), course.get("课程名称"));
+            Object credit = firstNonNull(course.get("credit"), course.get("credits"), course.get("courseCredit"), course.get("学分"));
+            if (name.isBlank() && credit == null) {
+                continue;
+            }
+            Map<String, Object> item = new HashMap<>();
+            item.put("name", name);
+            item.put("credit", credit == null ? 0 : credit);
+            normalized.add(item);
+        }
+        return normalized;
+    }
+
+    private String firstNonBlank(Object... values) {
+        for (Object value : values) {
+            if (value != null) {
+                String text = String.valueOf(value).trim();
+                if (!text.isEmpty()) {
+                    return text;
+                }
+            }
+        }
+        return "";
+    }
+
+    private Object firstNonNull(Object... values) {
+        for (Object value : values) {
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
     }
 }
